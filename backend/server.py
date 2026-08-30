@@ -34,19 +34,9 @@ def now_iso() -> str:
 
 
 # ---------- Models ----------
-class ClassInfo(BaseModel):
-    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    code: str
-    course_title: str
-    topic: str
-    professor: str
-    room: str
-    time_range: str
-    status: str = "starting_now"
-
-
 class SessionCreate(BaseModel):
-    class_id: str
+    title: Optional[str] = None
+    subject: Optional[str] = None
     mode: Literal["real", "demo"] = "real"
 
 
@@ -56,39 +46,14 @@ class SessionEnd(BaseModel):
 
 class ClassSession(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    class_id: str
-    course_code: str
-    course_title: str
-    topic: str
-    professor: str
-    room: str
+    title: Optional[str] = None
+    subject: Optional[str] = None
     mode: str
     status: str  # live | processing | complete | error
     started_at: str
     ended_at: Optional[str] = None
     duration_seconds: Optional[int] = None
     created_at: str = Field(default_factory=now_iso)
-
-
-# ---------- Seed ----------
-SEED_CLASS = {
-    "id": "cls_consumer_behaviour",
-    "code": "CB",
-    "course_title": "Consumer Behaviour",
-    "topic": "Price elasticity of demand",
-    "professor": "Prof. Mehta",
-    "room": "Room 916",
-    "time_range": "11:00–12:00",
-    "status": "starting_now",
-}
-
-
-@app.on_event("startup")
-async def seed_current_class():
-    existing = await db.classes.find_one({"id": SEED_CLASS["id"]})
-    if not existing:
-        await db.classes.insert_one({**SEED_CLASS})
-        logger.info("Seeded current class")
 
 
 # ---------- Routes ----------
@@ -108,28 +73,13 @@ async def health():
     }
 
 
-@api_router.get("/classes/current", response_model=ClassInfo)
-async def current_class():
-    doc = await db.classes.find_one({"id": SEED_CLASS["id"]}, {"_id": 0})
-    if not doc:
-        doc = {**SEED_CLASS}
-        await db.classes.insert_one({**SEED_CLASS})
-    return ClassInfo(**doc)
-
-
 @api_router.post("/sessions", response_model=ClassSession)
 async def create_session(payload: SessionCreate):
-    cls = await db.classes.find_one({"id": payload.class_id}, {"_id": 0})
-    if not cls:
-        raise HTTPException(status_code=404, detail="Class not found")
-
+    title = (payload.title or "").strip() or None
+    subject = (payload.subject or "").strip() or None
     session = ClassSession(
-        class_id=cls["id"],
-        course_code=cls["code"],
-        course_title=cls["course_title"],
-        topic=cls["topic"],
-        professor=cls["professor"],
-        room=cls["room"],
+        title=title,
+        subject=subject,
         mode=payload.mode,
         status="live",
         started_at=now_iso(),

@@ -8,14 +8,10 @@ export const getHealth = async () => {
   return data;
 };
 
-export const getCurrentClass = async () => {
-  const { data } = await axios.get(`${API}/classes/current`);
-  return data;
-};
-
-export const createSession = async ({ classId, mode }) => {
+export const createSession = async ({ title, subject, mode }) => {
   const { data } = await axios.post(`${API}/sessions`, {
-    class_id: classId,
+    title,
+    subject,
     mode,
   });
   return data;

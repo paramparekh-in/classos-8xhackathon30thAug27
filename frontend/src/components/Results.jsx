@@ -42,10 +42,10 @@ export const Results = ({ session, onDone }) => {
 
       <div className="mt-6 rounded-3xl bg-white p-5 shadow-sm ring-1 ring-black/5">
         <p className="text-[12px] font-medium text-[#6b7fb3]">
-          {session?.course_title} · {session?.room}
+          {session?.subject || "No subject"}
         </p>
         <h2 className="mt-0.5 text-lg font-semibold text-slate-900" data-testid="results-topic">
-          {session?.topic}
+          {session?.title || "Untitled class"}
         </h2>
 
         <div className="mt-3">
@@ -70,7 +70,7 @@ export const Results = ({ session, onDone }) => {
           <Row
             icon={Radio}
             label="Mode"
-            value={session?.mode === "demo" ? "Demo" : "Real"}
+            value={session?.mode === "demo" ? "Simulated Demo" : "Real"}
             testId="results-mode"
           />
         </div>

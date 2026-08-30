@@ -8,7 +8,6 @@ import { Results } from "@/components/Results";
 import { StatusScreen } from "@/components/StatusScreen";
 import { ErrorScreen } from "@/components/ErrorScreen";
 import {
-  getCurrentClass,
   createSession,
   endSession,
   finalizeSession,
@@ -19,7 +18,8 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 function App() {
   const [phase, setPhase] = useState("idle");
-  const [classInfo, setClassInfo] = useState(null);
+  const [title, setTitle] = useState("");
+  const [subject, setSubject] = useState("");
   const [session, setSession] = useState(null);
   const [elapsed, setElapsed] = useState(0);
   const [errorMsg, setErrorMsg] = useState("");
@@ -28,12 +28,6 @@ function App() {
   const streamRef = useRef(null);
   const timerRef = useRef(null);
   const startTsRef = useRef(null);
-
-  useEffect(() => {
-    getCurrentClass()
-      .then(setClassInfo)
-      .catch(() => setClassInfo(null));
-  }, []);
 
   const stopTimer = useCallback(() => {
     if (timerRef.current) {
@@ -60,18 +54,19 @@ function App() {
   const beginLive = useCallback(
     async (mode) => {
       const created = await createSession({
-        classId: classInfo.id,
+        title: title.trim() || null,
+        subject: subject.trim() || null,
         mode,
       });
       setSession(created);
       setPhase("live");
       startTimer();
     },
-    [classInfo, startTimer]
+    [title, subject, startTimer]
   );
 
   const handleJoinReal = useCallback(async () => {
-    if (!classInfo || busy) return;
+    if (busy) return;
     setBusy(true);
     setErrorMsg("");
     setPhase("mic_permission");
@@ -95,10 +90,10 @@ function App() {
     } finally {
       setBusy(false);
     }
-  }, [classInfo, busy, beginLive, stopStream]);
+  }, [busy, beginLive, stopStream]);
 
   const handleJoinDemo = useCallback(async () => {
-    if (!classInfo || busy) return;
+    if (busy) return;
     setBusy(true);
     setErrorMsg("");
     setPhase("connecting");
@@ -111,7 +106,7 @@ function App() {
     } finally {
       setBusy(false);
     }
-  }, [classInfo, busy, beginLive]);
+  }, [busy, beginLive]);
 
   const handleEnd = useCallback(async () => {
     if (!session) return;
@@ -153,7 +148,10 @@ function App() {
       case "idle":
         return (
           <StartClass
-            classInfo={classInfo}
+            title={title}
+            subject={subject}
+            onTitleChange={setTitle}
+            onSubjectChange={setSubject}
             onJoinReal={handleJoinReal}
             onJoinDemo={handleJoinDemo}
             loading={busy}
