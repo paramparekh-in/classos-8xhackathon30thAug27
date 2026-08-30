@@ -1,0 +1,8 @@
+.App {
+  min-height: 100vh;
+}
+
+::selection {
+  background: #1e3a8a;
+  color: #fff;
+}
