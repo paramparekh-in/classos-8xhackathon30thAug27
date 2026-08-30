@@ -33,3 +33,17 @@ export const getSession = async (sessionId) => {
   const { data } = await axios.get(`${API}/sessions/${sessionId}`);
   return data;
 };
+
+export const getScribeToken = async (sessionId) => {
+  const { data } = await axios.post(`${API}/sessions/${sessionId}/scribe-token`);
+  return data.token;
+};
+
+export const postTranscriptChunk = async (sessionId, { seq, text, timestamp }) => {
+  const { data } = await axios.post(`${API}/sessions/${sessionId}/transcript`, {
+    seq,
+    text,
+    timestamp,
+  });
+  return data;
+};

@@ -1,0 +1,43 @@
+{
+  "summary": "Full backend + frontend verification of REAL ElevenLabs Scribe v2 Realtime integration in ClassOS. Backend: rewrote /app/backend/tests/backend_test.py for the current API (title/subject schema) — 19 pytest cases covering health, session lifecycle, scribe-token security (200 real+live / 400 demo / 409 after end / 404 unknown), API-key non-leakage, transcript store+dedup+ordering+empty-text, and error handling — ALL 19 PASSED. Frontend: DROVE REAL SPEECH AUDIO into the mic by overriding navigator.mediaDevices.getUserMedia with a WebAudio MediaStreamDestination looping /app/tests/fake_speech_48k.wav (temporarily served from frontend/public, since the harness cannot set Chromium launch args). Result: genuine ElevenLabs transcription confirmed — partial text streamed live and matched the spoken WAV content ('The quick brown fox jumps over the lazy dog. This is a live class transcription test. One two three four five.'), committed segments appended in chronological order, partial rendered italic + muted (fontStyle:italic, rgb(148,163,184)) vs committed normal dark (rgb(30,41,59)), auto-scroll pinned to bottom (verified deterministically), committed chunks persisted to MongoDB matching UI text exactly with unique increasing seqs. Also verified: DEMO separation (zero scribe-token/transcript network calls, live-status 'SIMULATED DEMO', results-mode 'Simulated Demo'), mic-denied honest error screen + retry back to start, forced 503 token failure -> 'Transcription unavailable' + Retry button that successfully recovered to Listening, and End Class cleanup (status=complete, transcript count identical immediately after End and +6s later = no recording continues). NO hardcoded/simulated transcript text found in Real Mode.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "POST /api/sessions/{id}/transcript", "issue": "No session-status guard: the endpoint will happily store chunks for a session whose status is 'processing' or 'complete'. The frontend correctly stops posting after End (verified), but a stale/replayed client could append chunks to a finalized session. Consider rejecting with 409 when status != 'live'."},
+      {"endpoint": "POST /api/sessions/{id}/end and /finalize", "issue": "Still no state-transition validation (carried over from iteration 1): 'end' can be replayed on an already-complete session and reset it to 'processing'; 'finalize' can skip 'end'."},
+      {"endpoint": "POST /api/sessions", "issue": "Returns 200 instead of 201 for resource creation (cosmetic REST nit)."},
+      {"endpoint": "GET /api/classes/current", "issue": "Endpoint no longer exists (404). Expected per the current schema change, but the review request still listed it — confirming removal is intentional. No key leakage."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [
+      {"flow": "End Class while a partial transcript is still pending", "issue": "MEDIUM/data-loss: ElevenLabs VAD did not emit its first committed segment until ~34s of continuous speech. handleEndClick calls scribe.disconnect() immediately with no flush/final-commit, so any speech still sitting in the un-committed partial buffer is silently discarded. Reproduced: a ~9s real session ended with 'Listening · microphone active' and 0 persisted chunks even though audio was being captured. Consider awaiting a final commit (or scribe's flush/commit API) before disconnecting, or persisting the last partial as a final chunk on End.", "affected_selectors": ["[data-testid=\"end-class-btn\"]", "[data-testid=\"transcript-partial\"]"]}
+    ],
+    "design_issues": [
+      {"screen": "Live class · transcript card (desktop 1920px)", "issues": ["The inner scroll region is capped at max-h-[240px] while the parent white card is flex-1 and grows to ~370px+, so a long transcript scrolls inside a small window with a large blank white area beneath it. Let the scroll region fill the card (flex-1 + min-h-0) instead of a fixed max-height."]},
+      {"screen": "Live class · partial transcript", "issues": ["Partial text accumulates unbounded while VAD waits to commit (observed 250+ characters / ~30s in one partial). Once the card overflows this is handled by auto-scroll, but consider truncating/windowing very long partials."]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/backend_test.py", "/app/test_reports/pytest/pytest_results.xml"],
+  "action_items": [
+    "Flush/commit pending partial transcript before scribe.disconnect() in LiveClassReal.handleEndClick so trailing speech is not lost (MEDIUM).",
+    "Make the transcript scroll region fill its card (flex-1 min-h-0) instead of max-h-[240px] to remove the dead white space (LOW).",
+    "Optionally reject POST /transcript with 409 when session status != 'live' (LOW).",
+    "Migrate @app.on_event('startup'/'shutdown') to FastAPI lifespan handlers (LOW)."
+  ],
+  "critical_code_review_comments": [
+    "LiveClassReal.jsx: the mount useEffect's cleanup closes over `scribe` from the first render (stale closure) and the dependency array is disabled. It worked in all tests (disconnect on unmount confirmed by the no-new-chunks-after-End check), but store the hook object in a ref to make unmount cleanup robust.",
+    "LiveClassReal.jsx: postTranscriptChunk(...).catch(() => {}) swallows persistence failures silently — a dropped chunk would never surface to the user. Log it or surface a subtle 'not saved' indicator.",
+    "server.py: scribe_token correctly logs only type(e).__name__ and never echoes the key; verified no 'sk_' pattern in any response body.",
+    "server.py add_transcript_chunk uses $setOnInsert + upsert, which is the correct idempotent dedup; unique index on (session_id, seq) confirmed working (repeat POST with different text returns stored:false and preserves the original text)."
+  ],
+  "updated_files": ["/app/backend/tests/backend_test.py"],
+  "success_rate": {"backend": "100% (19/19)", "frontend": "100% of listed scenarios verified; 1 medium integration gap found (partial not flushed on End)"},
+  "seed_data_creation": "Created several TEST_ class_sessions + transcript_chunks documents in MongoDB via API/UI lifecycle tests (no delete endpoint exists; not surfaced by any UI list). Temporarily copied /app/tests/fake_speech_48k.wav to /app/frontend/public/test_fake_speech.wav to drive the fake mic, then DELETED it — public/ now contains only index.html.",
+  "should_call_test_agent_after_fix": false,
+  "should_main_agent_self_test": true,
+  "test_credentials": "N/A - app has no authentication. ELEVENLABS_API_KEY read from /app/backend/.env by tests only to assert it never appears in responses; never printed.",
+  "context_for_next_testing_agent": "Backend suite: cd /app/backend && python -m pytest tests/backend_test.py -v. To DRIVE real speech through the mic without Chromium launch args: copy /app/tests/fake_speech_48k.wav into /app/frontend/public/, then page.add_init_script overriding navigator.mediaDevices.getUserMedia to return a MediaStreamAudioDestinationNode stream from an AudioBufferSourceNode (loop=true) decoding fetch('/test_fake_speech.wav'); also call context.grant_permissions(['microphone']). Real ElevenLabs partials appear within ~2s; first VAD commit takes ~34s of continuous speech, so budget 40-75s to observe committed segments. Delete the wav from public/ afterwards. Transcript scroll container selector: '[data-testid=\"transcript-area\"] div.overflow-y-auto'. Force the 'Transcription unavailable' state by page.route-ing '**/api/sessions/*/scribe-token' to a 503.",
+  "rca_of_the_issue": "Trailing-speech loss on End Class: ElevenLabs CommitStrategy.VAD only emits onCommittedTranscript after it detects an utterance boundary; with continuous speech the first commit came ~34s in. LiveClassReal.handleEndClick calls scribe.disconnect() synchronously and only committed chunks are ever POSTed, so the entire pending partial buffer is dropped. Mitigation: request a final commit/flush (or persist the current partial as the last chunk with the next seq) before disconnect. Everything else in the feature set behaved exactly as specified, including no post-End recording and complete demo/real isolation."
+}

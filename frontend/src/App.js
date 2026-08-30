@@ -3,6 +3,7 @@ import "@/App.css";
 import { AppShell } from "@/components/AppShell";
 import { StartClass } from "@/components/StartClass";
 import { LiveClass } from "@/components/LiveClass";
+import { LiveClassReal } from "@/components/LiveClassReal";
 import { Processing } from "@/components/Processing";
 import { Results } from "@/components/Results";
 import { StatusScreen } from "@/components/StatusScreen";
@@ -162,7 +163,11 @@ function App() {
       case "ending":
         return <StatusScreen state={phase} />;
       case "live":
-        return <LiveClass session={session} elapsed={elapsed} onEnd={handleEnd} />;
+        return session?.mode === "real" ? (
+          <LiveClassReal session={session} elapsed={elapsed} onEnd={handleEnd} />
+        ) : (
+          <LiveClass session={session} elapsed={elapsed} onEnd={handleEnd} />
+        );
       case "processing":
         return <Processing />;
       case "complete":
