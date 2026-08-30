@@ -175,6 +175,8 @@ function App() {
     setReplayScript(null);
     setElapsed(0);
     setErrorMsg("");
+    setTitle("");
+    setSubject("");
     setPhase("idle");
     setRefreshKey((k) => k + 1);
   }, [stopTimer, stopStream]);

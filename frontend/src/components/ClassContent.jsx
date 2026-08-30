@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { CheckCircle2, XCircle, Clock, HelpCircle, BookOpen, Hash, CircleHelp, RotateCw } from "lucide-react";
+import { CheckCircle2, XCircle, Clock, HelpCircle, BookOpen, Hash, CircleHelp, RotateCw, Flag } from "lucide-react";
 import { formatDuration } from "../lib/format";
 
 const TimeChip = ({ t, onJump }) => {
@@ -54,6 +54,21 @@ export const NotesView = ({ notes, onJumpTo, onRegenerate, regenerating }) => {
 
   return (
     <div data-testid="notes-view">
+      {notes.flagged?.length > 0 && (
+        <div className="mb-4 rounded-2xl border border-amber-200 bg-amber-50 p-4" data-testid="notes-flagged">
+          <div className="mb-2 flex items-center gap-2 text-[11px] font-bold uppercase tracking-wide text-amber-700">
+            <Flag className="h-3.5 w-3.5" /> You flagged these
+          </div>
+          <ul className="space-y-2">
+            {notes.flagged.map((f, i) => (
+              <li key={i} className="text-[13px] leading-relaxed text-slate-700" data-testid="flagged-item">
+                {f.explanation}
+                <TimeChip t={f.t} onJump={onJumpTo} />
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
       <p className="text-[15px] font-semibold leading-snug text-slate-900" data-testid="notes-about">
         {notes.about}
       </p>
@@ -133,6 +148,21 @@ export const NotesView = ({ notes, onJumpTo, onRegenerate, regenerating }) => {
 
 export const QuizView = ({ quiz, onHearAgain, onRegenerate, regenerating }) => {
   const [answers, setAnswers] = useState({});
+  const [orders, setOrders] = useState({});
+
+  const tryAgain = () => {
+    setAnswers({});
+    const next = {};
+    quiz.forEach((q, qi) => {
+      const idx = q.options.map((_, i) => i);
+      for (let i = idx.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [idx[i], idx[j]] = [idx[j], idx[i]];
+      }
+      next[qi] = idx;
+    });
+    setOrders(next);
+  };
 
   if (!quiz || quiz.length === 0) {
     return (
@@ -159,21 +189,45 @@ export const QuizView = ({ quiz, onHearAgain, onRegenerate, regenerating }) => {
     0
   );
   const allAnswered = answeredCount === quiz.length;
-  const missed = quiz
-    .map((q, i) => (answers[i] !== undefined && answers[i] !== q.answer_index ? i + 1 : null))
+  const missedList = quiz
+    .map((q, i) => (answers[i] !== undefined && answers[i] !== q.answer_index ? { i, t: q.t } : null))
     .filter(Boolean);
 
   return (
     <div data-testid="quiz-view">
       {allAnswered && (
         <div className="mb-4 rounded-2xl bg-[#eef3fb] p-4" data-testid="quiz-score">
-          <p className="text-[16px] font-bold text-[#2f49a3]">
-            {correctCount}/{quiz.length} correct
-          </p>
-          {missed.length > 0 && (
-            <p className="mt-0.5 text-[13px] text-slate-500">
-              Review question{missed.length > 1 ? "s" : ""} {missed.join(" and ")}.
+          <div className="flex items-center justify-between">
+            <p className="text-[16px] font-bold text-[#2f49a3]">
+              {correctCount}/{quiz.length} correct
             </p>
+            <button
+              onClick={tryAgain}
+              data-testid="quiz-try-again-btn"
+              className="inline-flex items-center gap-1 rounded-full bg-white px-3 py-1.5 text-[12px] font-semibold text-[#2f49a3] shadow-sm hover:bg-slate-50"
+            >
+              <RotateCw className="h-3.5 w-3.5" /> Try again
+            </button>
+          </div>
+          {missedList.length > 0 && (
+            <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[13px] text-slate-500">
+              Review:
+              {missedList.map((m) =>
+                onHearAgain && typeof m.t === "number" ? (
+                  <button
+                    key={m.i}
+                    onClick={() => onHearAgain(m.t)}
+                    className="rounded-full bg-white px-2 py-0.5 text-[12px] font-medium text-[#2f49a3] hover:underline"
+                  >
+                    Q{m.i + 1} · {formatDuration(m.t)}
+                  </button>
+                ) : (
+                  <span key={m.i} className="text-slate-600">
+                    Q{m.i + 1}
+                  </span>
+                )
+              )}
+            </div>
           )}
         </div>
       )}
@@ -188,7 +242,8 @@ export const QuizView = ({ quiz, onHearAgain, onRegenerate, regenerating }) => {
                 {qi + 1}. {q.q}
               </p>
               <div className="mt-3 space-y-2">
-                {q.options.map((opt, oi) => {
+                {(orders[qi] || q.options.map((_, i) => i)).map((oi) => {
+                  const opt = q.options[oi];
                   const isCorrect = oi === q.answer_index;
                   const isChosen = chosen === oi;
                   let cls = "border-slate-200 bg-white text-slate-700";

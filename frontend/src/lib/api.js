@@ -89,3 +89,8 @@ export const getShared = async (slug) => {
   const { data } = await axios.get(`${API}/shared/${slug}`);
   return data;
 };
+
+export const flagMoment = async (sessionId, at_seconds) => {
+  const { data } = await axios.post(`${API}/sessions/${sessionId}/flag`, { at_seconds });
+  return data;
+};

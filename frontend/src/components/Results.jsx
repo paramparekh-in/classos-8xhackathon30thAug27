@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import { toast } from "sonner";
 import { Share2, ArrowLeft } from "lucide-react";
-import { formatDuration, formatClock } from "../lib/format";
+import { formatDuration, formatClock, formatMinutes, formatStart } from "../lib/format";
 import { getTranscript, regenerateNotes, regenerateQuiz, shareSession } from "../lib/api";
 import { NotesView, QuizView } from "./ClassContent";
 
@@ -35,16 +35,23 @@ export const Results = ({ session, onDone }) => {
 
   useEffect(() => {
     if (tab !== "transcript" || pendingT == null || chunks.length === 0) return;
-    const target = chunks.find(
-      (c) => typeof c.at_seconds === "number" && c.at_seconds >= pendingT
-    ) || chunks[chunks.length - 1];
-    const el = rowRefs.current[target?.seq];
-    if (el && scrollRef.current) {
-      el.scrollIntoView({ behavior: "smooth", block: "center" });
-      el.classList.add("bg-[#eef3fb]");
-      setTimeout(() => el.classList.remove("bg-[#eef3fb]"), 1600);
-    }
-    setPendingT(null);
+    const raf = requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        let target = null;
+        for (const c of chunks) {
+          if (typeof c.at_seconds === "number" && c.at_seconds <= pendingT) target = c;
+        }
+        target = target || chunks[0];
+        const el = rowRefs.current[target?.seq];
+        if (el) {
+          el.scrollIntoView({ behavior: "smooth", block: "center" });
+          el.classList.add("bg-[#eef3fb]");
+          setTimeout(() => el.classList.remove("bg-[#eef3fb]"), 1500);
+        }
+        setPendingT(null);
+      });
+    });
+    return () => cancelAnimationFrame(raf);
   }, [tab, pendingT, chunks]);
 
   const jumpTo = (t) => {
@@ -136,8 +143,9 @@ export const Results = ({ session, onDone }) => {
         {session?.title || "Untitled class"}
       </h1>
       <p className="text-[12px] text-slate-400" data-testid="results-meta">
-        {session?.subject || "No subject"} · {formatDuration(session?.duration_seconds)} ·{" "}
-        {formatClock(session?.started_at)} · {session?.mode === "demo" ? "Demo" : session?.mode === "replay" ? "Replay" : "Real"}
+        {session?.subject || "No subject"} · {formatMinutes(session?.duration_seconds)} ·{" "}
+        {formatStart(session?.started_at)} ·{" "}
+        {session?.mode === "demo" ? "Demo" : session?.mode === "replay" ? "Replay" : "Real"}
       </p>
 
       <div className="mt-4 flex rounded-2xl bg-slate-100 p-1">

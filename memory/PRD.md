@@ -57,7 +57,16 @@ dashboards, uploads, or extra features. Connect to GitHub.
 
 ## Next Tasks
 1. Confirm GitHub connection (user clicks "Save to GitHub").
-2. Choose next feature from P2 (export, ask-about-this-class, flag moments).
+2. Consider deploy.
+
+## Implemented — Round 2 (2026-08-30)
+- P0-1 Fixed-viewport live screen: LiveSessionView is a h-[100dvh] frame (header + sticky Catch Me Up + single scrolling TranscriptList with overscroll-contain + sticky footer). End Class always on-screen; auto-follow only within 80px of bottom; "Jump to live" pill works; expanded Catch Me Up capped at 45vh internal scroll.
+- P0-2 Timestamp deep links: Results (key points + quiz "hear it again") switch to Transcript tab and, via requestAnimationFrame, scrollIntoView the nearest line at/<= that time with a 1.5s highlight.
+- P0-3 Catch Me Up length + freshness: server enforces right_now<=2 sentences, how_we_got_here<=1, ~45 words total (one compress re-ask then truncate); frontend 20s tick kept fresh (refetch if stale >40s with new words), inline "updating…" without replacing text.
+- P1: notes terms filtered to explicitly-defined, non-obvious (max 6); labeled meta ("X min · started h:mm am"); Start form clears on return; "last 5 minutes" refetches on each tick while expanded + "as of" stamp; Catch Me Up card is a region with a single chevron button (aria-expanded); quiz shows score + review links + "Try again" (reshuffles options); orphan live sessions auto-end after 10 min of no new transcript and are hidden from "Your classes".
+- P2: "I'm lost" flag button in the live header (one tap, no dialog) -> stored per session -> finalize generates a "You flagged these" section at the top of the notes (explanation + jump link).
+- Verified: backend curl (catchup <=45 words, flag->flagged notes, orphan/list filter, labeled meta) and mobile 390x844 e2e (End on-screen, internal scroll, flag->flagged section, timestamp jump+highlight).
+- Untouched (as instructed): notes content approach, quiz question style, demo pacing, End confirm dialog.
 
 ## Implemented — Catch Me Up + Notes/Quiz + Share (P0 & P1, 2026-08-30)
 Model: GPT-5.4 Mini via Emergent universal key (backend/llm.py).

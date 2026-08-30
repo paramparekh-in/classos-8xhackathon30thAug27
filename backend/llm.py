@@ -64,11 +64,17 @@ CATCHUP_SYSTEM = (
 )
 
 
-async def generate_catchup(running_summary, new_text, as_of, session_id):
+async def generate_catchup(running_summary, new_text, as_of, session_id, compress=False):
+    extra = (
+        "\n\nYour previous answer was TOO LONG. Compress hard: right_now at most 2 short "
+        "sentences, how_we_got_here at most 1 short sentence, ~45 words total."
+        if compress
+        else ""
+    )
     prompt = (
         f"Rolling summary so far:\n{running_summary or '(none yet)'}\n\n"
         f"New transcript since last update:\n{new_text or '(none)'}\n\n"
-        f"Current time in class: {as_of} seconds.\nReturn the JSON now."
+        f"Current time in class: {as_of} seconds.\nReturn the JSON now.{extra}"
     )
     data = await _ask_json(CATCHUP_SYSTEM, prompt, session_id, timeout=25)
     return data
@@ -96,7 +102,9 @@ NOTES_SYSTEM = (
     "about = one line on what this class was about. key_points = 5 to 8 points, each with "
     "t = the transcript timestamp in seconds it was said. terms = terms defined in class with "
     "the professor's own definition. numbers = any numbers or worked examples actually used. "
-    "left_open = questions the professor raised and did not answer. If the class was short or "
+    "left_open = questions the professor raised and did not answer. Include a term ONLY if the "
+    "professor explicitly defined it AND a student in this course could plausibly not know it "
+    "(skip obvious ones like 'debt' or 'equity'); at most 6 terms. If the class was short or "
     "the audio thin, produce FEWER points and set thin=true. Never pad to hit a count."
 )
 
@@ -122,3 +130,20 @@ async def generate_quiz(transcript_text, session_id):
     prompt = f"Class transcript (each line prefixed with its second):\n{transcript_text}\n\nReturn the JSON now."
     data = await _ask_json(QUIZ_SYSTEM, prompt, session_id, timeout=45)
     return data.get("questions", [])
+
+
+FLAG_SYSTEM = (
+    "A student tapped 'I'm lost' at certain moments in a lecture. For each flagged second, explain "
+    "in 1-2 plain sentences what was being discussed at that point in the transcript, grounded "
+    "strictly in the transcript. Respond with STRICT JSON only: "
+    '{"flagged": [{"t": number, "explanation": string}]}. Keep each explanation short and concrete.'
+)
+
+
+async def generate_flag_explanations(transcript_text, flags, session_id):
+    prompt = (
+        f"Class transcript (each line prefixed with its second):\n{transcript_text}\n\n"
+        f"Flagged seconds: {flags}\n\nReturn the JSON now."
+    )
+    data = await _ask_json(FLAG_SYSTEM, prompt, session_id, timeout=45)
+    return data.get("flagged", [])

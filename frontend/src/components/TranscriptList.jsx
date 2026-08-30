@@ -14,7 +14,7 @@ export const TranscriptList = ({ committed, partial }) => {
   const onScroll = () => {
     const el = scrollRef.current;
     if (!el) return;
-    const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 48;
+    const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
     setFollow(atBottom);
   };
 
@@ -33,7 +33,7 @@ export const TranscriptList = ({ committed, partial }) => {
       <div
         ref={scrollRef}
         onScroll={onScroll}
-        className="min-h-0 flex-1 space-y-2 overflow-y-auto pr-1"
+        className="min-h-0 flex-1 space-y-2 overflow-y-auto overscroll-contain pr-1"
         data-testid="transcript-area"
       >
         {empty && (

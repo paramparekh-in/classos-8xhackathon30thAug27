@@ -51,6 +51,18 @@ def _clamp_sentences(text, max_sentences):
     return " ".join(parts[:max_sentences]).strip()
 
 
+def _limit_catchup(right_now, how, max_words=45):
+    rn = _clamp_sentences(right_now, 2)
+    hw = _clamp_sentences(how, 1)
+    total = len((f"{rn or ''} {hw or ''}").split())
+    if total > max_words and hw:
+        hw = None  # drop the context line first
+        total = len((rn or "").split())
+    if total > max_words and rn:
+        rn = _clamp_sentences(rn, 1)
+    return rn, hw
+
+
 # ---------- Models ----------
 class SessionCreate(BaseModel):
     title: Optional[str] = None
@@ -70,6 +82,10 @@ class TranscriptChunkIn(BaseModel):
     at_seconds: Optional[int] = None
 
 
+class FlagIn(BaseModel):
+    at_seconds: int
+
+
 class ClassSession(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     title: Optional[str] = None
@@ -87,6 +103,7 @@ class ClassSession(BaseModel):
     notes: Optional[dict] = None
     quiz: Optional[list] = None
     share_slug: Optional[str] = None
+    flags: list = Field(default_factory=list)
 
 
 async def _transcript_lines(session_id: str, max_words: int = 6000):
@@ -142,12 +159,37 @@ async def create_session(payload: SessionCreate, x_device_id: Optional[str] = He
     return session
 
 
+async def _auto_end_orphans(device_id: str):
+    from datetime import timedelta
+    cutoff = datetime.now(timezone.utc) - timedelta(minutes=10)
+    lives = await db.class_sessions.find(
+        {"device_id": device_id, "status": "live"}, {"_id": 0}
+    ).to_list(100)
+    for s in lives:
+        last = await db.transcript_chunks.find(
+            {"session_id": s["id"]}, {"_id": 0}
+        ).sort("seq", -1).to_list(1)
+        ref = last[0]["created_at"] if last else s.get("started_at")
+        ref_dt = None
+        try:
+            ref_dt = datetime.fromisoformat(ref)
+            if ref_dt.tzinfo is None:
+                ref_dt = ref_dt.replace(tzinfo=timezone.utc)
+        except Exception:  # noqa
+            ref_dt = None
+        if not ref_dt or ref_dt < cutoff:
+            await db.class_sessions.update_one(
+                {"id": s["id"]}, {"$set": {"status": "complete", "ended_at": now_iso()}}
+            )
+
+
 @api_router.get("/sessions", response_model=List[ClassSession])
 async def list_sessions(x_device_id: Optional[str] = Header(default=None)):
     if not x_device_id:
         return []
+    await _auto_end_orphans(x_device_id)
     docs = await db.class_sessions.find(
-        {"device_id": x_device_id}, {"_id": 0}
+        {"device_id": x_device_id, "status": {"$ne": "live"}}, {"_id": 0}
     ).sort("created_at", -1).to_list(100)
     return [ClassSession(**d) for d in docs]
 
@@ -187,6 +229,14 @@ async def finalize_session(session_id: str):
             quiz = await llm.generate_quiz(text, session_id)
         except Exception as e:  # noqa
             logger.error(f"Quiz generation failed: {type(e).__name__}: {e}")
+        flags = doc.get("flags") or []
+        if notes and flags:
+            try:
+                flagged = await llm.generate_flag_explanations(text, sorted(set(flags)), session_id)
+                if flagged:
+                    notes["flagged"] = flagged
+            except Exception as e:  # noqa
+                logger.error(f"Flag explanations failed: {type(e).__name__}: {e}")
 
     update = {"status": "complete", "notes": notes, "quiz": quiz}
     await db.class_sessions.update_one({"id": session_id}, {"$set": update})
@@ -323,11 +373,25 @@ async def catchup(session_id: str):
         logger.error(f"Catchup failed: {type(e).__name__}: {e}")
         raise HTTPException(status_code=503, detail="Catch Me Up unavailable")
 
+    rn, hw = data.get("right_now"), data.get("how_we_got_here")
+    combined_words = len((f"{rn or ''} {hw or ''}").split())
+    if combined_words > 45:
+        try:
+            data2 = await llm.generate_catchup(
+                doc.get("running_summary"), new_text, last_at, session_id, compress=True
+            )
+            rn, hw = data2.get("right_now"), data2.get("how_we_got_here")
+            if data2.get("running_summary"):
+                data["running_summary"] = data2["running_summary"]
+        except Exception:  # noqa
+            pass
+    rn, hw = _limit_catchup(rn, hw)
+
     running = (data.get("running_summary") or "").strip() or doc.get("running_summary")
     max_seq = chunks[-1]["seq"] if chunks else covered
     result = {
-        "right_now": _clamp_sentences(data.get("right_now"), 2),
-        "how_we_got_here": _clamp_sentences(data.get("how_we_got_here"), 1),
+        "right_now": rn,
+        "how_we_got_here": hw,
         "terms": (data.get("terms") or [])[:2],
         "as_of_seconds": last_at,
     }
@@ -366,6 +430,18 @@ async def catchup_expand(session_id: str):
         logger.error(f"Expand failed: {type(e).__name__}: {e}")
         raise HTTPException(status_code=503, detail="Unavailable")
     return {"bullets": (data.get("bullets") or [])[:5]}
+
+
+@api_router.post("/sessions/{session_id}/flag")
+async def flag_moment(session_id: str, payload: FlagIn):
+    doc = await db.class_sessions.find_one({"id": session_id}, {"_id": 0})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Session not found")
+    await db.class_sessions.update_one(
+        {"id": session_id},
+        [{"$set": {"flags": {"$concatArrays": [{"$ifNull": ["$flags", []]}, [payload.at_seconds]]}}}],
+    )
+    return {"ok": True, "at_seconds": payload.at_seconds}
 
 
 @api_router.post("/sessions/{session_id}/share")

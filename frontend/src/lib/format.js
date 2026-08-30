@@ -26,3 +26,22 @@ export const todayLabel = () => {
     })
     .toUpperCase();
 };
+
+export const formatMinutes = (totalSeconds) => {
+  const s = Math.max(0, Math.floor(totalSeconds || 0));
+  if (s < 60) return `${s} sec`;
+  return `${Math.round(s / 60)} min`;
+};
+
+export const formatStart = (iso) => {
+  if (!iso) return "";
+  try {
+    const t = new Date(iso).toLocaleTimeString([], {
+      hour: "numeric",
+      minute: "2-digit",
+    });
+    return `started ${t.toLowerCase()}`;
+  } catch {
+    return "";
+  }
+};

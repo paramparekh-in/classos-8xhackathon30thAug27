@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { postTranscriptChunk } from "../lib/api";
+import { postTranscriptChunk, flagMoment } from "../lib/api";
 import { useCatchMeUp } from "../hooks/useCatchMeUp";
 import { demoLecture } from "../data/demoLecture";
 import { LiveSessionView } from "./LiveSessionView";
@@ -14,6 +14,7 @@ export const LiveClass = ({ session, elapsed, onEnd, script }) => {
   const idxRef = useRef(0);
   const startRef = useRef(0);
   const wordsRef = useRef(0);
+  const lastAtRef = useRef(0);
 
   const lecture = script && script.length ? script : demoLecture;
   const speed = session.mode === "replay" ? 4 : 1;
@@ -26,6 +27,7 @@ export const LiveClass = ({ session, elapsed, onEnd, script }) => {
         const e = lecture[idxRef.current];
         const seq = idxRef.current;
         const at = Math.round(e.t);
+        lastAtRef.current = at;
         setCommitted((prev) => [...prev, { seq, text: e.text }]);
         wordsRef.current += e.text.split(/\s+/).length;
         catchup.notifyWords(wordsRef.current);
@@ -54,6 +56,7 @@ export const LiveClass = ({ session, elapsed, onEnd, script }) => {
       partial=""
       catchup={catchup}
       onEnd={onEnd}
+      onFlag={() => flagMoment(session.id, lastAtRef.current).catch(() => {})}
     />
   );
 };

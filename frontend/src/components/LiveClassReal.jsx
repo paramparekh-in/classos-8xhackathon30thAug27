@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useScribe, CommitStrategy } from "@elevenlabs/react";
-import { getScribeToken, postTranscriptChunk } from "../lib/api";
+import { getScribeToken, postTranscriptChunk, flagMoment } from "../lib/api";
 import { useCatchMeUp } from "../hooks/useCatchMeUp";
 import { LiveSessionView } from "./LiveSessionView";
 
@@ -141,6 +141,7 @@ export const LiveClassReal = ({ session, elapsed, onEnd }) => {
       catchup={catchup}
       onEnd={handleEnd}
       onRetry={connectScribe}
+      onFlag={() => flagMoment(session.id, Math.round(elapsedRef.current)).catch(() => {})}
     />
   );
 };

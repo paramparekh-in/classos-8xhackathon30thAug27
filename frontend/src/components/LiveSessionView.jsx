@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Square, RotateCw } from "lucide-react";
+import { toast } from "sonner";
+import { Square, RotateCw, Flag } from "lucide-react";
 import { formatDuration } from "../lib/format";
 import { useWakeLock } from "../hooks/useWakeLock";
 import { CatchMeUpCard } from "./CatchMeUpCard";
@@ -30,6 +31,7 @@ export const LiveSessionView = ({
   catchup,
   onEnd,
   onRetry,
+  onFlag,
 }) => {
   const [confirm, setConfirm] = useState(false);
   useWakeLock(true);
@@ -37,74 +39,87 @@ export const LiveSessionView = ({
   const badge = BADGE[mode] || BADGE.real;
   const conn = CONN[connectionState] || CONN.connecting;
 
+  const handleFlag = () => {
+    if (onFlag) onFlag();
+    toast.success("Flagged this moment");
+  };
+
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 10 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.4, ease: "easeOut" }}
-      className="flex min-h-0 flex-1 flex-col"
-      style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
-      data-testid="screen-live-class"
-    >
-      {/* Compact top strip */}
-      <div className="mt-3 flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <span className="relative flex h-2.5 w-2.5">
-            <span className={`absolute inline-flex h-full w-full animate-ping rounded-full opacity-75 ${badge.ping}`} />
-            <span className={`relative inline-flex h-2.5 w-2.5 rounded-full ${badge.dot}`} />
-          </span>
-          <span className={`text-[11px] font-bold tracking-[0.14em] ${badge.text}`} data-testid="live-status">
-            {badge.label}
-          </span>
+    <div className="flex min-h-0 flex-1 flex-col" data-testid="screen-live-class">
+      {/* Header — fixed */}
+      <div className="shrink-0">
+        <div className="mt-3 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <span className="relative flex h-2.5 w-2.5">
+              <span className={`absolute inline-flex h-full w-full animate-ping rounded-full opacity-75 ${badge.ping}`} />
+              <span className={`relative inline-flex h-2.5 w-2.5 rounded-full ${badge.dot}`} />
+            </span>
+            <span className={`text-[11px] font-bold tracking-[0.14em] ${badge.text}`} data-testid="live-status">
+              {badge.label}
+            </span>
+          </div>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={handleFlag}
+              data-testid="flag-btn"
+              className="flex items-center gap-1 rounded-full bg-amber-50 px-2.5 py-1 text-[11px] font-semibold text-amber-700 hover:bg-amber-100"
+              title="Mark this moment — I'm lost"
+            >
+              <Flag className="h-3 w-3" /> I'm lost
+            </button>
+            <span className="font-mono text-[15px] font-semibold tabular-nums text-slate-700" data-testid="live-timer">
+              {formatDuration(elapsed)}
+            </span>
+          </div>
         </div>
-        <span className="font-mono text-[15px] font-semibold tabular-nums text-slate-700" data-testid="live-timer">
-          {formatDuration(elapsed)}
-        </span>
+
+        <div className="mt-2 flex items-center justify-between">
+          <div className="min-w-0">
+            <p className="truncate text-[15px] font-semibold text-slate-900" data-testid="live-title">
+              {title || "Untitled class"}
+            </p>
+            <p className="truncate text-[12px] text-slate-400">{subject || "No subject"}</p>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <span className={`h-1.5 w-1.5 rounded-full ${conn.dot}`} />
+            <span className="text-[11px] text-slate-400" data-testid="connection-status">
+              {conn.label}
+            </span>
+          </div>
+        </div>
+
+        {connectionState === "unavailable" && onRetry && (
+          <button
+            onClick={onRetry}
+            data-testid="retry-btn"
+            className="mt-2 flex items-center gap-1.5 rounded-full bg-slate-100 px-3 py-1.5 text-[12px] font-medium text-slate-700 hover:bg-slate-200"
+          >
+            <RotateCw className="h-3.5 w-3.5" /> Retry
+          </button>
+        )}
+
+        {/* Catch Me Up — the hero, never scrolls away */}
+        <div className="mt-4">
+          <CatchMeUpCard catchup={catchup} paused={connectionState === "unavailable"} />
+        </div>
       </div>
 
-      <div className="mt-2 flex items-center justify-between">
-        <div className="min-w-0">
-          <p className="truncate text-[15px] font-semibold text-slate-900" data-testid="live-title">
-            {title || "Untitled class"}
-          </p>
-          <p className="truncate text-[12px] text-slate-400">{subject || "No subject"}</p>
-        </div>
-        <div className="flex items-center gap-1.5">
-          <span className={`h-1.5 w-1.5 rounded-full ${conn.dot}`} />
-          <span className="text-[11px] text-slate-400" data-testid="connection-status">
-            {conn.label}
-          </span>
-        </div>
-      </div>
-
-      {connectionState === "unavailable" && onRetry && (
-        <button
-          onClick={onRetry}
-          data-testid="retry-btn"
-          className="mt-2 flex items-center gap-1.5 self-start rounded-full bg-slate-100 px-3 py-1.5 text-[12px] font-medium text-slate-700 hover:bg-slate-200"
-        >
-          <RotateCw className="h-3.5 w-3.5" /> Retry
-        </button>
-      )}
-
-      {/* Catch Me Up — the brightest element, above the transcript */}
-      <div className="mt-4">
-        <CatchMeUpCard catchup={catchup} paused={connectionState === "unavailable"} />
-      </div>
-
-      {/* Transcript — the evidence, dimmer, fills the rest */}
-      <div className="mt-4 flex min-h-[160px] flex-1 flex-col rounded-3xl bg-white/70 p-4 ring-1 ring-black/5">
+      {/* Transcript — the ONLY scrolling region */}
+      <div className="mt-4 flex min-h-0 flex-1 flex-col rounded-3xl bg-white/70 p-4 ring-1 ring-black/5">
         <TranscriptList committed={committed} partial={partial} />
       </div>
 
-      <button
-        onClick={() => setConfirm(true)}
-        data-testid="end-class-btn"
-        className="mt-4 flex w-full items-center justify-center gap-2 rounded-2xl bg-slate-900 py-4 text-[15px] font-semibold text-white shadow-md transition-transform duration-200 hover:scale-[1.01] active:scale-[0.99]"
-      >
-        <Square className="h-4 w-4 fill-current" />
-        End Class
-      </button>
+      {/* Footer — sticky */}
+      <div className="shrink-0" style={{ paddingBottom: "env(safe-area-inset-bottom)" }}>
+        <button
+          onClick={() => setConfirm(true)}
+          data-testid="end-class-btn"
+          className="mt-4 flex w-full items-center justify-center gap-2 rounded-2xl bg-slate-900 py-4 text-[15px] font-semibold text-white shadow-md transition-transform duration-200 hover:scale-[1.01] active:scale-[0.99]"
+        >
+          <Square className="h-4 w-4 fill-current" />
+          End Class
+        </button>
+      </div>
 
       <AnimatePresence>
         {confirm && (
@@ -150,6 +165,6 @@ export const LiveSessionView = ({
           </motion.div>
         )}
       </AnimatePresence>
-    </motion.div>
+    </div>
   );
 };
