@@ -57,4 +57,14 @@ dashboards, uploads, or extra features. Connect to GitHub.
 
 ## Next Tasks
 1. Confirm GitHub connection (user clicks "Save to GitHub").
-2. Choose next feature: real "Catch Me Up" summaries, auto notes, or session history.
+2. Choose next feature from P2 (export, ask-about-this-class, flag moments).
+
+## Implemented — Catch Me Up + Notes/Quiz + Share (P0 & P1, 2026-08-30)
+Model: GPT-5.4 Mini via Emergent universal key (backend/llm.py).
+- Simulated Demo now replays a scripted WACC lecture (src/data/demoLecture.js) through the SAME transcript + Catch Me Up + finalize pipeline as real mode; badge "SIMULATED DEMO". Added "Replay a saved class" (badge "REPLAY") that replays a stored transcript at 4x.
+- Catch Me Up (hero): automatic, no button. Backend POST /catchup keeps a rolling running_summary and returns right_now/how_we_got_here (clamped to <=3 sentences server-side) + <=2 terms + as_of_seconds; returns null when transcript too thin. POST /catchup/expand = "last 5 minutes" (5 bullets). Frontend fires every 20s only when >=40 new committed words (plus a capped early kick and a reconnect refresh), single in-flight, cross-fades without blanking, "updated Ns ago", term chips, tap-to-expand, paused state when transcription unavailable. Card sits ABOVE the transcript.
+- finalize generates + stores Notes and Quiz. Results has Notes/Quiz/Transcript tabs; metadata is one quiet line; regenerate affordances (POST /notes, /quiz). Notes grounded (about, key_points with timestamps, terms, numbers, left_open, thin flag); tapping a timestamp jumps to the Transcript tab. Quiz = 5 understanding MCQs (4 options, explanation, timestamp); tap locks answer green/red with "hear it again"; shows score X/5.
+- Share: POST /share -> slug; public /s/{slug} (react-router) read-only Notes + Quiz, no auth, "Made with ClassOS". Copy-to-clipboard with link-prompt fallback.
+- P1: device-scoped "Your classes" (X-Device-Id header, GET /sessions) with open + replay; End-Class confirmation dialog; Screen Wake Lock; jump-to-live pill; mobile-first fixed-height live frame (h-100dvh) so End Class stays on-screen and the transcript scrolls internally.
+- Verified: backend 41/41 pytest; testing agent drove real audio (real-mode transcript + catchup from spoken content), full demo/replay/notes/quiz/share/public-page flows; fixed the two significant defects it found (mobile height frame + share false-error) and re-verified.
+- Deferred (P1 #6 remainder / P2): IndexedDB local mirror + "Resume this class", exponential-backoff local buffering, export MD/PDF, "Ask about this class", flag-a-moment.

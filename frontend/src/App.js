@@ -13,6 +13,7 @@ import {
   endSession,
   finalizeSession,
   getSession,
+  getTranscript,
 } from "@/lib/api";
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -22,9 +23,11 @@ function App() {
   const [title, setTitle] = useState("");
   const [subject, setSubject] = useState("");
   const [session, setSession] = useState(null);
+  const [replayScript, setReplayScript] = useState(null);
   const [elapsed, setElapsed] = useState(0);
   const [errorMsg, setErrorMsg] = useState("");
   const [busy, setBusy] = useState(false);
+  const [refreshKey, setRefreshKey] = useState(0);
 
   const streamRef = useRef(null);
   const timerRef = useRef(null);
@@ -53,10 +56,10 @@ function App() {
   }, []);
 
   const beginLive = useCallback(
-    async (mode) => {
+    async (mode, tt = title, ss = subject) => {
       const created = await createSession({
-        title: title.trim() || null,
-        subject: subject.trim() || null,
+        title: (tt || "").trim() || null,
+        subject: (ss || "").trim() || null,
         mode,
       });
       setSession(created);
@@ -70,6 +73,7 @@ function App() {
     if (busy) return;
     setBusy(true);
     setErrorMsg("");
+    setReplayScript(null);
     setPhase("mic_permission");
     try {
       if (!navigator.mediaDevices?.getUserMedia) {
@@ -77,8 +81,10 @@ function App() {
       }
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       streamRef.current = stream;
+      // We only needed the permission gate; the scribe hook opens its own stream.
+      stopStream();
       setPhase("connecting");
-      await sleep(700);
+      await sleep(600);
       await beginLive("real");
     } catch (e) {
       stopStream();
@@ -97,9 +103,10 @@ function App() {
     if (busy) return;
     setBusy(true);
     setErrorMsg("");
+    setReplayScript(null);
     setPhase("connecting");
     try {
-      await sleep(700);
+      await sleep(600);
       await beginLive("demo");
     } catch (e) {
       setErrorMsg(e?.message || "Could not start the demo session.");
@@ -109,6 +116,38 @@ function App() {
     }
   }, [busy, beginLive]);
 
+  const handleReplay = useCallback(
+    async (src) => {
+      if (busy) return;
+      setBusy(true);
+      setErrorMsg("");
+      setPhase("connecting");
+      try {
+        const tr = await getTranscript(src.id);
+        const script = (tr.chunks || []).map((c, i) => ({
+          t: typeof c.at_seconds === "number" ? c.at_seconds : i * 6,
+          text: c.text,
+        }));
+        if (!script.length) throw new Error("That class has no transcript to replay.");
+        setReplayScript(script);
+        await sleep(400);
+        await beginLive("replay", src.title, src.subject);
+      } catch (e) {
+        setErrorMsg(e?.message || "Could not replay that class.");
+        setPhase("error");
+      } finally {
+        setBusy(false);
+      }
+    },
+    [busy, beginLive]
+  );
+
+  const handleOpenSession = useCallback((s) => {
+    setReplayScript(null);
+    setSession(s);
+    setPhase("complete");
+  }, []);
+
   const handleEnd = useCallback(async () => {
     if (!session) return;
     const finalSeconds = Math.floor((Date.now() - startTsRef.current) / 1000);
@@ -116,10 +155,9 @@ function App() {
     stopStream();
     setPhase("ending");
     try {
-      await sleep(600);
+      await sleep(500);
       await endSession(session.id, finalSeconds);
       setPhase("processing");
-      await sleep(1200);
       await finalizeSession(session.id);
       const finished = await getSession(session.id);
       setSession(finished);
@@ -134,15 +172,20 @@ function App() {
     stopTimer();
     stopStream();
     setSession(null);
+    setReplayScript(null);
     setElapsed(0);
     setErrorMsg("");
     setPhase("idle");
+    setRefreshKey((k) => k + 1);
   }, [stopTimer, stopStream]);
 
-  useEffect(() => () => {
-    stopTimer();
-    stopStream();
-  }, [stopTimer, stopStream]);
+  useEffect(
+    () => () => {
+      stopTimer();
+      stopStream();
+    },
+    [stopTimer, stopStream]
+  );
 
   const render = () => {
     switch (phase) {
@@ -155,7 +198,10 @@ function App() {
             onSubjectChange={setSubject}
             onJoinReal={handleJoinReal}
             onJoinDemo={handleJoinDemo}
+            onReplay={handleReplay}
+            onOpenSession={handleOpenSession}
             loading={busy}
+            refreshKey={refreshKey}
           />
         );
       case "mic_permission":
@@ -166,7 +212,12 @@ function App() {
         return session?.mode === "real" ? (
           <LiveClassReal session={session} elapsed={elapsed} onEnd={handleEnd} />
         ) : (
-          <LiveClass session={session} elapsed={elapsed} onEnd={handleEnd} />
+          <LiveClass
+            session={session}
+            elapsed={elapsed}
+            onEnd={handleEnd}
+            script={session?.mode === "replay" ? replayScript : undefined}
+          />
         );
       case "processing":
         return <Processing />;
@@ -179,7 +230,7 @@ function App() {
     }
   };
 
-  return <AppShell>{render()}</AppShell>;
+  return <AppShell fill={phase === "live"}>{render()}</AppShell>;
 }
 
 export default App;
